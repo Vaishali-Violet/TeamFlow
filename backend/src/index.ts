@@ -70,9 +70,13 @@ app.use('/api/notifications', notificationRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/calendar', calendarRouter);
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`);
 
-  // Start background worker after server is listening
-  startWorker();
-});
+    // Start background worker after server is listening
+    startWorker();
+  });
+}
+
+export default app;
