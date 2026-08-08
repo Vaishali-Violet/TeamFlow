@@ -1,0 +1,11 @@
+{
+  "name": "teamflow-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TeamFlow Fullstack Workspace",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "start": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build"
+  }
+}
