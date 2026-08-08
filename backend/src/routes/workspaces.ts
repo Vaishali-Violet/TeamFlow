@@ -115,7 +115,7 @@ router.get('/', requireAuth, (req, res) => {
 // Get workspace details
 router.get('/:workspaceId', requireAuth, (req, res) => {
   try {
-    const { workspaceId } = req.params;
+    const workspaceId = req.params.workspaceId as string;
     const userId = req.session.userId!;
 
     const workspace = db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).get();
@@ -149,7 +149,7 @@ router.get('/:workspaceId', requireAuth, (req, res) => {
 // Update workspace
 router.put('/:workspaceId', requireAuth, (req, res) => {
   try {
-    const { workspaceId } = req.params;
+    const workspaceId = req.params.workspaceId as string;
     const userId = req.session.userId!;
     const { name } = req.body;
 
@@ -189,7 +189,7 @@ router.put('/:workspaceId', requireAuth, (req, res) => {
 // Add member to workspace
 router.post('/:workspaceId/members', requireAuth, (req, res) => {
   try {
-    const { workspaceId } = req.params;
+    const workspaceId = req.params.workspaceId as string;
     const userId = req.session.userId!;
     const { email, role } = req.body;
 
@@ -263,7 +263,7 @@ router.post('/:workspaceId/members', requireAuth, (req, res) => {
 // List workspace members (ALWAYS includes workspace creator)
 router.get('/:workspaceId/members', requireAuth, (req, res) => {
   try {
-    const { workspaceId } = req.params;
+    const workspaceId = req.params.workspaceId as string;
 
     const workspace = db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).get();
 
@@ -310,7 +310,8 @@ router.get('/:workspaceId/members', requireAuth, (req, res) => {
 // Remove member from workspace
 router.delete('/:workspaceId/members/:targetUserId', requireAuth, (req, res) => {
   try {
-    const { workspaceId, targetUserId } = req.params;
+    const workspaceId = req.params.workspaceId as string;
+    const targetUserId = req.params.targetUserId as string;
     const userId = req.session.userId!;
 
     const workspace = db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).get();

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db';
-import { tasks, userStories, projects, notifications } from '../db/schema';
+import { tasks, userStories, projects, notifications, users } from '../db/schema';
 import { requireAuth } from '../middleware/auth';
 import { eq, and, desc, isNull } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -74,7 +74,7 @@ router.post('/', requireAuth, (req, res) => {
 // List tasks for a story
 router.get('/story/:storyId', requireAuth, (req, res) => {
   try {
-    const { storyId } = req.params;
+    const storyId = req.params.storyId as string;
 
     const storyTasks = db.select()
       .from(tasks)
@@ -126,7 +126,7 @@ router.get('/my-work', requireAuth, (req, res) => {
 // Get task details
 router.get('/:taskId', requireAuth, (req, res) => {
   try {
-    const { taskId } = req.params;
+    const taskId = req.params.taskId as string;
 
     const task = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
     if (!task) {
@@ -143,7 +143,7 @@ router.get('/:taskId', requireAuth, (req, res) => {
 // Update task
 router.put('/:taskId', requireAuth, (req, res) => {
   try {
-    const { taskId } = req.params;
+    const taskId = req.params.taskId as string;
     const { title, description, status, priority, assigneeId, estimateMinutes, dueDate, sortOrder } = req.body;
 
     const existing = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
@@ -158,8 +158,11 @@ router.put('/:taskId', requireAuth, (req, res) => {
     if (description !== undefined) updateData.description = description;
     if (status !== undefined) {
       updateData.status = status;
-      if (status === 'done') updateData.completedAt = now;
-      else updateData.completedAt = null;
+      if (status === 'done') {
+        updateData.completedAt = now;
+      } else {
+        updateData.completedAt = null;
+      }
     }
     if (priority !== undefined) updateData.priority = priority;
     if (assigneeId !== undefined) updateData.assigneeId = assigneeId;
@@ -172,18 +175,15 @@ router.put('/:taskId', requireAuth, (req, res) => {
       .where(eq(tasks.id, taskId))
       .returning().get();
 
-    // Create notification if assignee changed or assigned
-    if (assigneeId && assigneeId !== existing.assigneeId) {
+    // Create notification if assignee changed
+    if (assigneeId && assigneeId !== existing.assigneeId && assigneeId !== req.session.userId) {
       const assigner = db.select().from(users).where(eq(users.id, req.session.userId!)).get();
-      const isReassignment = !!existing.assigneeId;
       db.insert(notifications).values({
         id: uuidv4(),
         userId: assigneeId,
         type: 'task_assigned',
-        title: isReassignment ? 'Task Reassigned to You' : 'Task Assigned to You',
-        message: isReassignment
-          ? `${assigner?.name || 'A team member'} reassigned task "${updated.title}" (${updated.key}) to you`
-          : `${assigner?.name || 'A team member'} assigned task "${updated.title}" (${updated.key}) to you`,
+        title: 'Task Assigned',
+        message: `${assigner?.name || 'A team member'} assigned you to task "${updated.title}" (${updated.key})`,
         relatedId: taskId,
         relatedType: 'task',
         createdAt: now,
@@ -200,7 +200,7 @@ router.put('/:taskId', requireAuth, (req, res) => {
 // Update task status
 router.patch('/:taskId/status', requireAuth, (req, res) => {
   try {
-    const { taskId } = req.params;
+    const taskId = req.params.taskId as string;
     const { status } = req.body;
 
     const existing = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
@@ -251,7 +251,7 @@ router.patch('/:taskId/status', requireAuth, (req, res) => {
 // Delete task
 router.delete('/:taskId', requireAuth, (req, res) => {
   try {
-    const { taskId } = req.params;
+    const taskId = req.params.taskId as string;
 
     db.delete(tasks).where(eq(tasks.id, taskId)).run();
     res.json({ message: 'Task deleted' });

@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { notificationApi } from '../api';
-import { LayoutDashboard, FolderKanban, CheckSquare, Bell, Users, LogOut, ChevronDown, Calendar, MessageSquare, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, CheckSquare, Bell, Users, LogOut, ChevronDown, Calendar, MessageSquare, Sun, Moon, Plus, Check, Building2 } from 'lucide-react';
 
 const Layout = () => {
   const { user, currentWorkspace, workspaces, setCurrentWorkspace, logout } = useAuth();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const [showWsMenu, setShowWsMenu] = useState(false);
+  const wsMenuRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>(
     (localStorage.getItem('teamflow_theme') as 'dark' | 'light') || 'dark'
   );
@@ -21,6 +22,20 @@ const Layout = () => {
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wsMenuRef.current && !wsMenuRef.current.contains(e.target as Node)) {
+        setShowWsMenu(false);
+      }
+    };
+    if (showWsMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showWsMenu]);
 
   useEffect(() => {
     const fetchUnread = () => {
@@ -152,58 +167,74 @@ const Layout = () => {
         {/* Top Navbar Header */}
         <header className="header flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--glass-border)', background: 'var(--glass-bg)' }}>
           {/* Left: Workspace Selector */}
-          <div className="relative">
+          <div className="relative z-50" ref={wsMenuRef}>
             <button
-              className="btn btn-secondary flex items-center gap-2 px-3 py-2 text-sm font-semibold"
+              className="workspace-selector-trigger"
               onClick={() => setShowWsMenu(!showWsMenu)}
-              style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--glass-border)' }}
             >
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-              <span>{currentWorkspace?.name || 'Select Workspace'}</span>
-              <ChevronDown size={14} className="text-secondary" />
+              <div className="workspace-trigger-avatar">
+                {currentWorkspace?.name ? currentWorkspace.name[0].toUpperCase() : <Building2 size={14} />}
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="truncate max-w-[140px]">
+                  {currentWorkspace?.name || 'Select Workspace'}
+                </span>
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+              </div>
+              <ChevronDown
+                size={15}
+                style={{
+                  color: 'var(--text-secondary)',
+                  transform: showWsMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease',
+                }}
+              />
             </button>
 
             {showWsMenu && (
-              <div
-                className="workspace-dropdown glass-panel absolute top-full left-0 mt-2 z-50 p-2 min-w-[240px]"
-                style={{
-                  boxShadow: 'var(--shadow-glass)',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--glass-border)',
-                  borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <div className="px-3 py-1.5 text-xs font-bold text-muted uppercase tracking-wider">Workspaces</div>
-                <div className="flex flex-col gap-1 my-1">
+              <div className="workspace-dropdown-menu">
+                <div className="workspace-dropdown-header">Workspaces</div>
+                <div className="workspace-dropdown-list">
                   {workspaces.map((ws) => {
                     const isActive = ws.id === currentWorkspace?.id;
                     return (
                       <button
                         key={ws.id}
-                        className={`workspace-item flex items-center justify-between p-2.5 rounded-md text-left transition-all ${isActive ? 'bg-indigo-600/20 text-primary font-semibold' : 'hover:bg-white/5 text-secondary'}`}
+                        className={`workspace-dropdown-item ${isActive ? 'active' : ''}`}
                         onClick={() => {
                           setCurrentWorkspace(ws);
                           setShowWsMenu(false);
                         }}
                       >
-                        <div className="flex items-center gap-2">
-                          {isActive && <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>}
-                          <span className="text-sm truncate">{ws.name}</span>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="workspace-item-avatar">
+                            {ws.name[0]?.toUpperCase()}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-medium truncate">{ws.name}</span>
+                            <span className="text-[11px] text-muted truncate">{ws.slug}</span>
+                          </div>
                         </div>
-                        <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/10 text-muted">{ws.role}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="workspace-role-badge">{ws.role || 'member'}</span>
+                          {isActive && <Check size={14} style={{ color: 'var(--accent-primary)' }} />}
+                        </div>
                       </button>
                     );
                   })}
                 </div>
-                <div className="border-t my-1" style={{ borderColor: 'var(--glass-border)' }} />
+                <div className="workspace-dropdown-divider" />
                 <button
-                  className="workspace-item w-full text-left p-2 rounded-md text-xs font-semibold text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-1.5"
+                  className="workspace-create-btn"
                   onClick={() => {
                     setShowWsMenu(false);
                     navigate('/workspace-setup');
                   }}
                 >
-                  <span>+ Create New Workspace</span>
+                  <div className="workspace-create-icon">
+                    <Plus size={13} />
+                  </div>
+                  <span>Create New Workspace</span>
                 </button>
               </div>
             )}

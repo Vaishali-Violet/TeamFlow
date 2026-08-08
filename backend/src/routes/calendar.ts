@@ -9,7 +9,7 @@ const router = Router();
 // Get calendar events (projects, stories, and tasks with due dates) for a workspace
 router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req, res) => {
   try {
-    const { workspaceId } = req.params;
+    const workspaceId = req.params.workspaceId as string;
 
     // 1. Get all projects in the workspace
     const workspaceProjects = db.select()

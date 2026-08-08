@@ -10,7 +10,7 @@ const router = Router();
 // Get messages for a workspace
 router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req, res) => {
   try {
-    const { workspaceId } = req.params;
+    const workspaceId = req.params.workspaceId as string;
 
     const messages = db.select({
       id: chatMessages.id,
@@ -36,7 +36,7 @@ router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req,
 // Post a new chat message
 router.post('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req, res) => {
   try {
-    const { workspaceId } = req.params;
+    const workspaceId = req.params.workspaceId as string;
     const { content } = req.body;
     const userId = req.session.userId!;
 
