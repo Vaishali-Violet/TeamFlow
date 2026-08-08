@@ -37,11 +37,16 @@ router.post('/register', async (req, res) => {
 
     // Create session
     (req.session as any).userId = newUser.id;
-
-    res.status(201).json({ 
-      id: newUser.id,
-      name: newUser.name,
-      email: newUser.email 
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'Failed to save session' });
+      }
+      res.status(201).json({ 
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email 
+      });
     });
   } catch (error) {
     console.error(error);
@@ -76,11 +81,16 @@ router.post('/login', async (req, res) => {
 
     // Create session
     (req.session as any).userId = user.id;
-
-    res.json({
-      id: user.id,
-      name: user.name,
-      email: user.email,
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'Failed to save session' });
+      }
+      res.json({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      });
     });
   } catch (error) {
     console.error(error);

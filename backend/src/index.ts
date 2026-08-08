@@ -20,11 +20,16 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+const isProduction = process.env.NODE_ENV === 'production';
 
-// CORS
+// Trust reverse proxies (Render, Railway, Vercel, Netlify, Heroku) for secure cookies
+app.set('trust proxy', 1);
+
+// CORS configuration supporting credentials
 app.use(cors({
   origin: (origin, callback) => {
-    callback(null, true);
+    if (!origin) return callback(null, true);
+    callback(null, origin);
   },
   credentials: true,
 }));
@@ -32,15 +37,15 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// Pure JS session management for serverless compatibility
+// Session management
 app.use(session({
   secret: process.env.SESSION_SECRET || 'super-secret-key-for-dev',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
   }
 }));
