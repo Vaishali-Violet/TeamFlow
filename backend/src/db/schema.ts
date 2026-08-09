@@ -1,121 +1,176 @@
 import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+// ─── 1. Users ────────────────────────────────────────────
 export const users = sqliteTable("users", {
-  id: text("id").primaryKey(), // UUID
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   avatarUrl: text("avatar_url"),
   timezone: text("timezone"),
-  isActive: integer("is_active", { mode: "boolean" }).default(true),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").references((): any => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references((): any => users.id),
 });
 
+// ─── 2. Workspaces ───────────────────────────────────────
 export const workspaces = sqliteTable("workspaces", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  createdBy: text("created_by").notNull().references(() => users.id),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").notNull().references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
 });
 
+// ─── 3. Workspace Members ───────────────────────────────
 export const workspaceMembers = sqliteTable("workspace_members", {
-  id: text("id").primaryKey(),
-  workspaceId: text("workspace_id").notNull().references(() => workspaces.id),
-  userId: text("user_id").notNull().references(() => users.id),
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workspaceId: integer("workspace_id").notNull().references(() => workspaces.id),
+  userId: integer("user_id").notNull().references(() => users.id),
   role: text("role", { enum: ["admin", "manager", "member"] }).notNull(),
-  joinedAt: integer("joined_at", { mode: "timestamp" }).notNull(),
-  isActive: integer("is_active", { mode: "boolean" }).default(true),
-});
+  isActive: integer("is_active").notNull().default(1),
+  joinedAt: integer("joined_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").notNull().references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
+}, (table) => ({
+  uniqueWorkspaceUser: uniqueIndex("uq_workspace_user").on(table.workspaceId, table.userId),
+}));
 
+// ─── 4. Projects ─────────────────────────────────────────
 export const projects = sqliteTable("projects", {
-  id: text("id").primaryKey(),
-  workspaceId: text("workspace_id").notNull().references(() => workspaces.id),
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workspaceId: integer("workspace_id").notNull().references(() => workspaces.id),
   key: text("key").notNull(),
   name: text("name").notNull(),
   description: text("description"),
   status: text("status", { enum: ["planning", "active", "paused", "completed", "archived"] }).notNull().default("planning"),
-  ownerId: text("owner_id").notNull().references(() => users.id),
-  startDate: integer("start_date", { mode: "timestamp" }),
-  targetDate: integer("target_date", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-});
+  ownerId: integer("owner_id").notNull().references(() => users.id),
+  startDate: integer("start_date"),
+  targetDate: integer("target_date"),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").notNull().references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
+}, (table) => ({
+  uniqueWorkspaceKey: uniqueIndex("uq_workspace_project_key").on(table.workspaceId, table.key),
+}));
 
-export const projectMembers = sqliteTable("project_members", {
-  id: text("id").primaryKey(),
-  projectId: text("project_id").notNull().references(() => projects.id),
-  userId: text("user_id").notNull().references(() => users.id),
-  projectRole: text("project_role", { enum: ["manager", "member"] }).notNull(),
-  joinedAt: integer("joined_at", { mode: "timestamp" }).notNull(),
-});
-
+// ─── 5. User Stories ─────────────────────────────────────
 export const userStories = sqliteTable("user_stories", {
-  id: text("id").primaryKey(),
-  projectId: text("project_id").notNull().references(() => projects.id),
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("project_id").notNull().references(() => projects.id),
   key: text("key").notNull(),
   title: text("title").notNull(),
   description: text("description"),
-  acceptanceCriteria: text("acceptance_criteria"), // JSON string
+  acceptanceCriteria: text("acceptance_criteria"),
   status: text("status", { enum: ["backlog", "todo", "in_progress", "blocked", "done"] }).notNull().default("backlog"),
   priority: text("priority", { enum: ["low", "medium", "high", "urgent"] }).notNull().default("medium"),
   storyPoints: integer("story_points"),
-  assigneeId: text("assignee_id").references(() => users.id),
-  reporterId: text("reporter_id").notNull().references(() => users.id),
-  dueDate: integer("due_date", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-});
+  assigneeId: integer("assignee_id").references(() => users.id),
+  reporterId: integer("reporter_id").notNull().references(() => users.id),
+  dueDate: integer("due_date"),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").notNull().references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
+}, (table) => ({
+  uniqueProjectKey: uniqueIndex("uq_project_story_key").on(table.projectId, table.key),
+}));
 
+// ─── 6. Tasks ────────────────────────────────────────────
 export const tasks = sqliteTable("tasks", {
-  id: text("id").primaryKey(),
-  storyId: text("story_id").notNull().references(() => userStories.id),
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  storyId: integer("story_id").notNull().references(() => userStories.id),
   key: text("key").notNull(),
   title: text("title").notNull(),
   description: text("description"),
   status: text("status", { enum: ["todo", "in_progress", "blocked", "done"] }).notNull().default("todo"),
   priority: text("priority", { enum: ["low", "medium", "high", "urgent"] }).notNull().default("medium"),
-  assigneeId: text("assignee_id").references(() => users.id),
-  reporterId: text("reporter_id").notNull().references(() => users.id),
+  assigneeId: integer("assignee_id").references(() => users.id),
+  reporterId: integer("reporter_id").notNull().references(() => users.id),
   estimateMinutes: integer("estimate_minutes"),
-  dueDate: integer("due_date", { mode: "timestamp" }),
+  dueDate: integer("due_date"),
   sortOrder: integer("sort_order"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-  completedAt: integer("completed_at", { mode: "timestamp" }),
-});
+  completedAt: integer("completed_at"),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").notNull().references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
+}, (table) => ({
+  uniqueStoryKey: uniqueIndex("uq_story_task_key").on(table.storyId, table.key),
+}));
 
-export const backgroundJobs = sqliteTable("background_jobs", {
-  id: text("id").primaryKey(),
-  jobType: text("job_type").notNull(),
-  payload: text("payload").notNull(), // JSON string
-  status: text("status", { enum: ["queued", "running", "succeeded", "failed"] }).notNull().default("queued"),
-  attempts: integer("attempts").notNull().default(0),
-  availableAt: integer("available_at", { mode: "timestamp" }).notNull(),
-  lockedAt: integer("locked_at", { mode: "timestamp" }),
-  lastError: text("last_error"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  completedAt: integer("completed_at", { mode: "timestamp" }),
-});
-
+// ─── 7. Notifications ───────────────────────────────────
 export const notifications = sqliteTable("notifications", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id),
-  type: text("type", { enum: ["task_assigned", "task_overdue", "story_updated", "member_added", "deadline_reminder"] }).notNull(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => users.id),
+  type: text("type").notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
   relatedId: text("related_id"),
   relatedType: text("related_type"),
-  isRead: integer("is_read", { mode: "boolean" }).default(false),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  isRead: integer("is_read").notNull().default(0),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
 });
 
+// ─── 8. Activity Logs ───────────────────────────────────
+export const activityLogs = sqliteTable("activity_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workspaceId: integer("workspace_id").notNull().references(() => workspaces.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  action: text("action").notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").notNull().references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
+});
+
+// ─── 9. Chat Messages ───────────────────────────────────
 export const chatMessages = sqliteTable("chat_messages", {
-  id: text("id").primaryKey(),
-  workspaceId: text("workspace_id").notNull().references(() => workspaces.id),
-  userId: text("user_id").notNull().references(() => users.id),
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workspaceId: integer("workspace_id").notNull().references(() => workspaces.id),
+  userId: integer("user_id").notNull().references(() => users.id),
   content: text("content").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").notNull().references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
+});
+
+// ─── 10. Background Jobs ────────────────────────────────
+export const backgroundJobs = sqliteTable("background_jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  jobType: text("job_type").notNull(),
+  payload: text("payload").notNull(),
+  status: text("status", { enum: ["queued", "running", "succeeded", "failed"] }).notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  availableAt: integer("available_at").notNull(),
+  lockedAt: integer("locked_at"),
+  lastError: text("last_error"),
+  completedAt: integer("completed_at"),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdById: integer("created_by_id").references(() => users.id),
+  modifiedAt: integer("modified_at"),
+  modifiedById: integer("modified_by_id").references(() => users.id),
 });

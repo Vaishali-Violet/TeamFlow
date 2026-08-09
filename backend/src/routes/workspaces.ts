@@ -3,7 +3,6 @@ import { db } from '../db';
 import { workspaces, workspaceMembers, users } from '../db/schema';
 import { requireAuth } from '../middleware/auth';
 import { eq, and } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -17,8 +16,7 @@ router.post('/', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Name and slug are required' });
     }
 
-    const now = new Date();
-    const workspaceId = uuidv4();
+    const now = Date.now();
     let finalSlug = slug.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
     // Ensure slug uniqueness by appending short random suffix if slug exists
@@ -29,22 +27,20 @@ router.post('/', requireAuth, (req, res) => {
 
     const newWorkspace = db.transaction((tx) => {
       const workspace = tx.insert(workspaces).values({
-        id: workspaceId,
         name,
         slug: finalSlug,
-        createdBy: userId,
+        createdById: userId,
         createdAt: now,
-        updatedAt: now,
       }).returning().get();
 
-      // Add creator as admin
+      // Add creator as admin member
       tx.insert(workspaceMembers).values({
-        id: uuidv4(),
-        workspaceId,
+        workspaceId: workspace.id,
         userId,
         role: 'admin',
         joinedAt: now,
-        isActive: true,
+        createdAt: now,
+        createdById: userId,
       }).run();
 
       return workspace;
@@ -67,7 +63,7 @@ router.get('/', requireAuth, (req, res) => {
       id: workspaces.id,
       name: workspaces.name,
       slug: workspaces.slug,
-      createdBy: workspaces.createdBy,
+      createdById: workspaces.createdById,
       createdAt: workspaces.createdAt,
       role: workspaceMembers.role,
     })
@@ -81,18 +77,18 @@ router.get('/', requireAuth, (req, res) => {
     // 2. Get workspaces created by the user (ensures owner never loses visibility)
     const createdWorkspaces = db.select()
       .from(workspaces)
-      .where(eq(workspaces.createdBy, userId))
+      .where(eq(workspaces.createdById, userId))
       .all();
 
     // Merge and deduplicate
-    const workspaceMap = new Map<string, any>();
+    const workspaceMap = new Map<number, any>();
 
     for (const ws of createdWorkspaces) {
       workspaceMap.set(ws.id, {
         id: ws.id,
         name: ws.name,
         slug: ws.slug,
-        createdBy: ws.createdBy,
+        createdById: ws.createdById,
         createdAt: ws.createdAt,
         role: 'admin',
       });
@@ -115,7 +111,7 @@ router.get('/', requireAuth, (req, res) => {
 // Get workspace details
 router.get('/:workspaceId', requireAuth, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
     const userId = req.session.userId!;
 
     const workspace = db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).get();
@@ -124,7 +120,7 @@ router.get('/:workspaceId', requireAuth, (req, res) => {
     }
 
     // Owner override
-    if (workspace.createdBy === userId) {
+    if (workspace.createdById === userId) {
       return res.json({ ...workspace, role: 'admin' });
     }
 
@@ -135,7 +131,7 @@ router.get('/:workspaceId', requireAuth, (req, res) => {
         eq(workspaceMembers.userId, userId)
       )).get();
 
-    if (!membership || membership.isActive === false) {
+    if (!membership || membership.isActive === 0) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -149,7 +145,7 @@ router.get('/:workspaceId', requireAuth, (req, res) => {
 // Update workspace
 router.put('/:workspaceId', requireAuth, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
     const userId = req.session.userId!;
     const { name } = req.body;
 
@@ -158,7 +154,7 @@ router.put('/:workspaceId', requireAuth, (req, res) => {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    const isOwner = workspace.createdBy === userId;
+    const isOwner = workspace.createdById === userId;
 
     if (!isOwner) {
       // Check admin role
@@ -175,7 +171,7 @@ router.put('/:workspaceId', requireAuth, (req, res) => {
     }
 
     const updated = db.update(workspaces)
-      .set({ name, updatedAt: new Date() })
+      .set({ name, modifiedAt: Date.now(), modifiedById: userId })
       .where(eq(workspaces.id, workspaceId))
       .returning().get();
 
@@ -189,7 +185,7 @@ router.put('/:workspaceId', requireAuth, (req, res) => {
 // Add member to workspace
 router.post('/:workspaceId/members', requireAuth, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
     const userId = req.session.userId!;
     const { email, role } = req.body;
 
@@ -202,7 +198,7 @@ router.post('/:workspaceId/members', requireAuth, (req, res) => {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    const isOwner = workspace.createdBy === userId;
+    const isOwner = workspace.createdById === userId;
 
     if (!isOwner) {
       // Check admin or manager membership
@@ -232,25 +228,24 @@ router.post('/:workspaceId/members', requireAuth, (req, res) => {
 
     if (existing) {
       // If previously inactive, reactivate
-      if (!existing.isActive) {
+      if (existing.isActive === 0) {
         db.update(workspaceMembers)
-          .set({ isActive: true, role: role as any })
-          .where(and(
-            eq(workspaceMembers.workspaceId, workspaceId),
-            eq(workspaceMembers.userId, targetUser.id)
-          )).run();
+          .set({ isActive: 1, role: role as any, modifiedAt: Date.now(), modifiedById: userId })
+          .where(eq(workspaceMembers.id, existing.id))
+          .run();
         return res.json({ message: 'Member reactivated' });
       }
       return res.status(409).json({ error: 'User is already a member of this workspace' });
     }
 
+    const now = Date.now();
     db.insert(workspaceMembers).values({
-      id: uuidv4(),
       workspaceId,
       userId: targetUser.id,
       role: role as 'admin' | 'manager' | 'member',
-      joinedAt: new Date(),
-      isActive: true,
+      joinedAt: now,
+      createdAt: now,
+      createdById: userId,
     }).run();
 
     res.status(201).json({ message: 'Member added successfully' });
@@ -263,7 +258,7 @@ router.post('/:workspaceId/members', requireAuth, (req, res) => {
 // List workspace members (ALWAYS includes workspace creator)
 router.get('/:workspaceId/members', requireAuth, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
 
     const workspace = db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).get();
 
@@ -283,9 +278,9 @@ router.get('/:workspaceId/members', requireAuth, (req, res) => {
 
     // Ensure the workspace creator is ALWAYS included in members list
     if (workspace) {
-      const creatorExists = members.some(m => m.userId === workspace.createdBy);
+      const creatorExists = members.some(m => m.userId === workspace.createdById);
       if (!creatorExists) {
-        const creatorUser = db.select().from(users).where(eq(users.id, workspace.createdBy)).get();
+        const creatorUser = db.select().from(users).where(eq(users.id, workspace.createdById)).get();
         if (creatorUser) {
           members.unshift({
             userId: creatorUser.id,
@@ -294,7 +289,7 @@ router.get('/:workspaceId/members', requireAuth, (req, res) => {
             avatarUrl: creatorUser.avatarUrl,
             role: 'admin',
             joinedAt: workspace.createdAt,
-            isActive: true,
+            isActive: 1,
           });
         }
       }
@@ -310,8 +305,8 @@ router.get('/:workspaceId/members', requireAuth, (req, res) => {
 // Remove member from workspace
 router.delete('/:workspaceId/members/:targetUserId', requireAuth, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
-    const targetUserId = req.params.targetUserId as string;
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
+    const targetUserId = parseInt(req.params.targetUserId as string, 10);
     const userId = req.session.userId!;
 
     const workspace = db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).get();
@@ -319,7 +314,7 @@ router.delete('/:workspaceId/members/:targetUserId', requireAuth, (req, res) => 
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    const isOwner = workspace.createdBy === userId;
+    const isOwner = workspace.createdById === userId;
 
     if (!isOwner) {
       const membership = db.select().from(workspaceMembers)
@@ -339,7 +334,7 @@ router.delete('/:workspaceId/members/:targetUserId', requireAuth, (req, res) => 
     }
 
     db.update(workspaceMembers)
-      .set({ isActive: false })
+      .set({ isActive: 0, modifiedAt: Date.now(), modifiedById: userId })
       .where(and(
         eq(workspaceMembers.workspaceId, workspaceId),
         eq(workspaceMembers.userId, targetUserId)

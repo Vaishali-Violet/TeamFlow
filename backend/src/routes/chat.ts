@@ -3,14 +3,13 @@ import { db } from '../db';
 import { chatMessages, users } from '../db/schema';
 import { requireAuth, requireWorkspaceAccess } from '../middleware/auth';
 import { eq, desc } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
 // Get messages for a workspace
 router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
 
     const messages = db.select({
       id: chatMessages.id,
@@ -36,7 +35,7 @@ router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req,
 // Post a new chat message
 router.post('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
     const { content } = req.body;
     const userId = req.session.userId!;
 
@@ -44,21 +43,20 @@ router.post('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req
       return res.status(400).json({ error: 'Message content is required' });
     }
 
-    const now = new Date();
-    const id = uuidv4();
+    const now = Date.now();
 
-    db.insert(chatMessages).values({
-      id,
+    const newMessage = db.insert(chatMessages).values({
       workspaceId,
       userId,
       content: content.trim(),
       createdAt: now,
-    }).run();
+      createdById: userId,
+    }).returning().get();
 
     const user = db.select().from(users).where(eq(users.id, userId)).get();
 
     res.status(201).json({
-      id,
+      id: newMessage.id,
       content: content.trim(),
       createdAt: now,
       userId,

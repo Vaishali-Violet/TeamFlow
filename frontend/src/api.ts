@@ -83,9 +83,6 @@ export const projectApi = {
   delete: (id: string) =>
     request(`/api/projects/${id}`, { method: 'DELETE' }),
 
-  getMembers: (id: string) =>
-    request(`/api/projects/${id}/members`),
-
   stats: (workspaceId: string) =>
     request(`/api/projects/stats/${workspaceId}`),
 };

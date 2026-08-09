@@ -1,9 +1,8 @@
 import { Router } from 'express';
 import { db } from '../db';
-import { projects, projectMembers, userStories, tasks, workspaceMembers, users } from '../db/schema';
+import { projects, userStories, tasks, workspaceMembers, users } from '../db/schema';
 import { requireAuth, requireWorkspaceAccess, requireWorkspaceAdminOrManager } from '../middleware/auth';
 import { eq, and } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -11,36 +10,20 @@ const router = Router();
 router.post('/', requireAuth, requireWorkspaceAccess, async (req, res) => {
   try {
     const { workspaceId, key, name, description, startDate, targetDate } = req.body;
-    const ownerId = req.session.userId!;
+    const userId = req.session.userId!;
+    const now = Date.now();
 
-    const now = new Date();
-    const projectId = uuidv4();
-
-    // Start transaction to insert project and add owner as member
-    const newProject = db.transaction((tx) => {
-      const project = tx.insert(projects).values({
-        id: projectId,
-        workspaceId,
-        key,
-        name,
-        description,
-        ownerId,
-        startDate: startDate ? new Date(startDate) : undefined,
-        targetDate: targetDate ? new Date(targetDate) : undefined,
-        createdAt: now,
-        updatedAt: now,
-      }).returning().get();
-
-      tx.insert(projectMembers).values({
-        id: uuidv4(),
-        projectId,
-        userId: ownerId,
-        projectRole: 'manager',
-        joinedAt: now,
-      }).run();
-
-      return project;
-    });
+    const newProject = db.insert(projects).values({
+      workspaceId: typeof workspaceId === 'string' ? parseInt(workspaceId, 10) : workspaceId,
+      key,
+      name,
+      description,
+      ownerId: userId,
+      startDate: startDate ? new Date(startDate).getTime() : undefined,
+      targetDate: targetDate ? new Date(targetDate).getTime() : undefined,
+      createdAt: now,
+      createdById: userId,
+    }).returning().get();
 
     res.status(201).json(newProject);
   } catch (error: any) {
@@ -55,7 +38,7 @@ router.post('/', requireAuth, requireWorkspaceAccess, async (req, res) => {
 // Get all projects in a workspace (requires workspace access)
 router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId, 10);
     const workspaceProjects = db.select().from(projects).where(eq(projects.workspaceId, workspaceId)).all();
     res.json(workspaceProjects);
   } catch (error) {
@@ -67,7 +50,7 @@ router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req,
 // Get a specific project
 router.get('/:projectId', requireAuth, (req, res) => {
   try {
-    const projectId = req.params.projectId as string;
+    const projectId = parseInt(req.params.projectId, 10);
 
     const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
     if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -82,7 +65,8 @@ router.get('/:projectId', requireAuth, (req, res) => {
 // Update project
 router.put('/:projectId', requireAuth, (req, res) => {
   try {
-    const projectId = req.params.projectId as string;
+    const projectId = parseInt(req.params.projectId, 10);
+    const userId = req.session.userId!;
     const { name, description, status, startDate, targetDate } = req.body;
 
     const existing = db.select().from(projects).where(eq(projects.id, projectId)).get();
@@ -90,12 +74,12 @@ router.put('/:projectId', requireAuth, (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const updateData: any = { updatedAt: new Date() };
+    const updateData: any = { modifiedAt: Date.now(), modifiedById: userId };
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (status !== undefined) updateData.status = status;
-    if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
-    if (targetDate !== undefined) updateData.targetDate = targetDate ? new Date(targetDate) : null;
+    if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate).getTime() : null;
+    if (targetDate !== undefined) updateData.targetDate = targetDate ? new Date(targetDate).getTime() : null;
 
     const updated = db.update(projects)
       .set(updateData)
@@ -112,14 +96,14 @@ router.put('/:projectId', requireAuth, (req, res) => {
 // Delete project
 router.delete('/:projectId', requireAuth, (req, res) => {
   try {
-    const projectId = req.params.projectId as string;
+    const projectId = parseInt(req.params.projectId, 10);
 
     const existing = db.select().from(projects).where(eq(projects.id, projectId)).get();
     if (!existing) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    // Delete in order: tasks -> stories -> project_members -> project
+    // Delete in order: tasks -> stories -> project
     db.transaction((tx) => {
       // Get all stories for this project
       const stories = tx.select().from(userStories).where(eq(userStories.projectId, projectId)).all();
@@ -127,7 +111,6 @@ router.delete('/:projectId', requireAuth, (req, res) => {
         tx.delete(tasks).where(eq(tasks.storyId, story.id)).run();
       }
       tx.delete(userStories).where(eq(userStories.projectId, projectId)).run();
-      tx.delete(projectMembers).where(eq(projectMembers.projectId, projectId)).run();
       tx.delete(projects).where(eq(projects.id, projectId)).run();
     });
 
@@ -138,70 +121,10 @@ router.delete('/:projectId', requireAuth, (req, res) => {
   }
 });
 
-// Add project member
-router.post('/:projectId/members', requireAuth, (req, res) => {
-  try {
-    const projectId = req.params.projectId as string;
-    const { userId, projectRole } = req.body;
-
-    if (!userId || !projectRole) {
-      return res.status(400).json({ error: 'User ID and role are required' });
-    }
-
-    const existing = db.select().from(projectMembers)
-      .where(and(
-        eq(projectMembers.projectId, projectId),
-        eq(projectMembers.userId, userId)
-      )).get();
-
-    if (existing) {
-      return res.status(409).json({ error: 'User is already a project member' });
-    }
-
-    db.insert(projectMembers).values({
-      id: uuidv4(),
-      projectId,
-      userId,
-      projectRole: projectRole as 'manager' | 'member',
-      joinedAt: new Date(),
-    }).run();
-
-    res.status(201).json({ message: 'Member added to project' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// List project members
-router.get('/:projectId/members', requireAuth, (req, res) => {
-  try {
-    const projectId = req.params.projectId as string;
-
-    const members = db.select({
-      userId: users.id,
-      name: users.name,
-      email: users.email,
-      avatarUrl: users.avatarUrl,
-      projectRole: projectMembers.projectRole,
-      joinedAt: projectMembers.joinedAt,
-    })
-      .from(projectMembers)
-      .innerJoin(users, eq(projectMembers.userId, users.id))
-      .where(eq(projectMembers.projectId, projectId))
-      .all();
-
-    res.json(members);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // Dashboard stats for a workspace
 router.get('/stats/:workspaceId', requireAuth, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId, 10);
 
     const allProjects = db.select().from(projects).where(eq(projects.workspaceId, workspaceId)).all();
     const activeProjects = allProjects.filter(p => p.status === 'active' || p.status === 'planning');

@@ -5,63 +5,71 @@ import * as schema from './schema';
 const dbPath = process.env.DATABASE_URL?.replace(/^file:/, '') || 'teamflow.db';
 const sqlite = new Database(dbPath);
 
+// Enable foreign key enforcement
+sqlite.pragma('foreign_keys = ON');
+
 // Ensure all database tables exist on startup
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     avatar_url TEXT,
     timezone TEXT,
-    is_active INTEGER DEFAULT 1,
+    is_active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    created_by_id INTEGER REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS workspaces (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
-    created_by TEXT NOT NULL REFERENCES users(id),
+    is_active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    created_by_id INTEGER NOT NULL REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS workspace_members (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-    user_id TEXT NOT NULL REFERENCES users(id),
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
     role TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
     joined_at INTEGER NOT NULL,
-    is_active INTEGER DEFAULT 1
+    created_at INTEGER NOT NULL,
+    created_by_id INTEGER NOT NULL REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id),
+    UNIQUE(workspace_id, user_id)
   );
 
   CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id),
     key TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
     status TEXT NOT NULL DEFAULT 'planning',
-    owner_id TEXT NOT NULL REFERENCES users(id),
+    owner_id INTEGER NOT NULL REFERENCES users(id),
     start_date INTEGER,
     target_date INTEGER,
+    is_active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS project_members (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL REFERENCES projects(id),
-    user_id TEXT NOT NULL REFERENCES users(id),
-    project_role TEXT NOT NULL,
-    joined_at INTEGER NOT NULL
+    created_by_id INTEGER NOT NULL REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id),
+    UNIQUE(workspace_id, key)
   );
 
   CREATE TABLE IF NOT EXISTS user_stories (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL REFERENCES projects(id),
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
     key TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
@@ -69,33 +77,85 @@ sqlite.exec(`
     status TEXT NOT NULL DEFAULT 'backlog',
     priority TEXT NOT NULL DEFAULT 'medium',
     story_points INTEGER,
-    assignee_id TEXT REFERENCES users(id),
-    reporter_id TEXT NOT NULL REFERENCES users(id),
+    assignee_id INTEGER REFERENCES users(id),
+    reporter_id INTEGER NOT NULL REFERENCES users(id),
     due_date INTEGER,
+    is_active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    created_by_id INTEGER NOT NULL REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id),
+    UNIQUE(project_id, key)
   );
 
   CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    story_id TEXT NOT NULL REFERENCES user_stories(id),
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    story_id INTEGER NOT NULL REFERENCES user_stories(id),
     key TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
     status TEXT NOT NULL DEFAULT 'todo',
     priority TEXT NOT NULL DEFAULT 'medium',
-    assignee_id TEXT REFERENCES users(id),
-    reporter_id TEXT NOT NULL REFERENCES users(id),
+    assignee_id INTEGER REFERENCES users(id),
+    reporter_id INTEGER NOT NULL REFERENCES users(id),
     estimate_minutes INTEGER,
     due_date INTEGER,
     sort_order INTEGER,
+    completed_at INTEGER,
+    is_active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    completed_at INTEGER
+    created_by_id INTEGER NOT NULL REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id),
+    UNIQUE(story_id, key)
+  );
+
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    related_id TEXT,
+    related_type TEXT,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    created_by_id INTEGER REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS activity_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    created_by_id INTEGER NOT NULL REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    content TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    created_by_id INTEGER NOT NULL REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS background_jobs (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     job_type TEXT NOT NULL,
     payload TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'queued',
@@ -103,28 +163,12 @@ sqlite.exec(`
     available_at INTEGER NOT NULL,
     locked_at INTEGER,
     last_error TEXT,
+    completed_at INTEGER,
+    is_active INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
-    completed_at INTEGER
-  );
-
-  CREATE TABLE IF NOT EXISTS notifications (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id),
-    type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    message TEXT NOT NULL,
-    related_id TEXT,
-    related_type TEXT,
-    is_read INTEGER DEFAULT 0,
-    created_at INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS chat_messages (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-    user_id TEXT NOT NULL REFERENCES users(id),
-    content TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_by_id INTEGER REFERENCES users(id),
+    modified_at INTEGER,
+    modified_by_id INTEGER REFERENCES users(id)
   );
 `);
 

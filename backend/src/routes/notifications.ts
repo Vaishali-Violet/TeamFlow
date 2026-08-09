@@ -33,7 +33,7 @@ router.get('/unread-count', requireAuth, (req, res) => {
       .from(notifications)
       .where(and(
         eq(notifications.userId, userId),
-        eq(notifications.isRead, false)
+        eq(notifications.isRead, 0)
       ))
       .all();
 
@@ -47,11 +47,11 @@ router.get('/unread-count', requireAuth, (req, res) => {
 // Mark notification as read
 router.patch('/:id/read', requireAuth, (req, res) => {
   try {
-    const id = req.params.id as string;
+    const id = parseInt(req.params.id, 10);
     const userId = req.session.userId!;
 
     const updated = db.update(notifications)
-      .set({ isRead: true })
+      .set({ isRead: 1, modifiedAt: Date.now(), modifiedById: userId })
       .where(and(
         eq(notifications.id, id),
         eq(notifications.userId, userId)
@@ -75,10 +75,10 @@ router.post('/mark-all-read', requireAuth, (req, res) => {
     const userId = req.session.userId!;
 
     db.update(notifications)
-      .set({ isRead: true })
+      .set({ isRead: 1, modifiedAt: Date.now(), modifiedById: userId })
       .where(and(
         eq(notifications.userId, userId),
-        eq(notifications.isRead, false)
+        eq(notifications.isRead, 0)
       ))
       .run();
 

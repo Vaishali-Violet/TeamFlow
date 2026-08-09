@@ -9,7 +9,7 @@ const router = Router();
 // Get calendar events (projects, stories, and tasks with due dates) for a workspace
 router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req, res) => {
   try {
-    const workspaceId = req.params.workspaceId as string;
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
 
     // 1. Get all projects in the workspace
     const workspaceProjects = db.select()
@@ -77,7 +77,7 @@ router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req,
         .filter(t => t.dueDate !== null);
     }
 
-    // Assign color categories based on priority/status matching the reference image palette
+    // Assign color categories based on priority/status
     const getColorCategory = (priority: string, status: string, type: string) => {
       if (status === 'done') return 'green';
       if (priority === 'urgent') return 'red';

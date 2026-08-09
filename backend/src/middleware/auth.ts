@@ -6,7 +6,7 @@ import { eq, and } from 'drizzle-orm';
 // Extend express Request to include session user
 declare module 'express-session' {
   interface SessionData {
-    userId: string;
+    userId: number;
   }
 }
 
@@ -21,14 +21,15 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
 // Middleware to require workspace membership
 export const requireWorkspaceAccess = (req: Request, res: Response, next: NextFunction) => {
   const userId = req.session.userId;
-  const workspaceId = req.params.workspaceId || req.body.workspaceId;
+  const workspaceIdRaw = req.params.workspaceId || req.body.workspaceId;
+  const workspaceId = typeof workspaceIdRaw === 'string' ? parseInt(workspaceIdRaw, 10) : workspaceIdRaw;
 
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
-  if (!workspaceId) return res.status(400).json({ error: 'Workspace ID required' });
+  if (!workspaceId || isNaN(workspaceId)) return res.status(400).json({ error: 'Workspace ID required' });
 
   // 1. Check if user is the creator/owner of the workspace
   const workspace = db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).get();
-  if (workspace && workspace.createdBy === userId) {
+  if (workspace && workspace.createdById === userId) {
     (req as any).workspaceRole = 'admin';
     return next();
   }
@@ -40,7 +41,7 @@ export const requireWorkspaceAccess = (req: Request, res: Response, next: NextFu
       eq(workspaceMembers.userId, userId)
     )).get();
 
-  if (!membership || membership.isActive === false) {
+  if (!membership || membership.isActive === 0) {
     return res.status(403).json({ error: 'Access denied to this workspace' });
   }
 

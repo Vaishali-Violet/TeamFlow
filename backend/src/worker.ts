@@ -1,7 +1,6 @@
 import { db } from './db';
 import { tasks, userStories, notifications, backgroundJobs } from './db/schema';
 import { eq, and, lt, not } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 const POLL_INTERVAL_MS = 60_000; // 1 minute
 
@@ -10,13 +9,13 @@ const POLL_INTERVAL_MS = 60_000; // 1 minute
  */
 function scanOverdueTasks() {
   try {
-    const now = new Date();
+    const now = Date.now();
 
     // Find tasks that are overdue (due_date < now and not done)
     const allTasks = db.select().from(tasks).all();
     const overdueTasks = allTasks.filter(task => {
       if (!task.dueDate || task.status === 'done') return false;
-      return new Date(task.dueDate) < now;
+      return task.dueDate < now;
     });
 
     for (const task of overdueTasks) {
@@ -27,25 +26,25 @@ function scanOverdueTasks() {
         .from(notifications)
         .where(and(
           eq(notifications.userId, task.assigneeId),
-          eq(notifications.relatedId, task.id),
+          eq(notifications.relatedId, String(task.id)),
           eq(notifications.type, 'task_overdue')
         ))
         .all();
 
-      // Only create notification if we haven't already (simple dedup)
+      // Only create notification if we haven't already today (simple dedup)
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
       const alreadyNotifiedToday = existingNotification.some(n => {
-        const notifDate = new Date(n.createdAt);
-        return notifDate.toDateString() === now.toDateString();
+        return n.createdAt >= todayStart.getTime();
       });
 
       if (!alreadyNotifiedToday) {
         db.insert(notifications).values({
-          id: uuidv4(),
           userId: task.assigneeId,
           type: 'task_overdue',
           title: 'Task overdue',
           message: `Task "${task.title}" (${task.key}) is past its due date`,
-          relatedId: task.id,
+          relatedId: String(task.id),
           relatedType: 'task',
           createdAt: now,
         }).run();
@@ -55,11 +54,10 @@ function scanOverdueTasks() {
     }
 
     // Also check for tasks due within 24 hours (deadline reminder)
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrow = now + 24 * 60 * 60 * 1000;
     const upcomingTasks = allTasks.filter(task => {
       if (!task.dueDate || task.status === 'done') return false;
-      const dueDate = new Date(task.dueDate);
-      return dueDate > now && dueDate <= tomorrow;
+      return task.dueDate > now && task.dueDate <= tomorrow;
     });
 
     for (const task of upcomingTasks) {
@@ -69,24 +67,24 @@ function scanOverdueTasks() {
         .from(notifications)
         .where(and(
           eq(notifications.userId, task.assigneeId),
-          eq(notifications.relatedId, task.id),
+          eq(notifications.relatedId, String(task.id)),
           eq(notifications.type, 'deadline_reminder')
         ))
         .all();
 
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
       const alreadyRemindedToday = existingReminder.some(n => {
-        const notifDate = new Date(n.createdAt);
-        return notifDate.toDateString() === now.toDateString();
+        return n.createdAt >= todayStart.getTime();
       });
 
       if (!alreadyRemindedToday) {
         db.insert(notifications).values({
-          id: uuidv4(),
           userId: task.assigneeId,
           type: 'deadline_reminder',
           title: 'Task due soon',
           message: `Task "${task.title}" (${task.key}) is due within 24 hours`,
-          relatedId: task.id,
+          relatedId: String(task.id),
           relatedType: 'task',
           createdAt: now,
         }).run();
@@ -104,7 +102,7 @@ function scanOverdueTasks() {
  */
 function processJobs() {
   try {
-    const now = new Date();
+    const now = Date.now();
 
     const pendingJobs = db.select()
       .from(backgroundJobs)
@@ -112,13 +110,13 @@ function processJobs() {
         eq(backgroundJobs.status, 'queued'),
       ))
       .all()
-      .filter(job => new Date(job.availableAt) <= now);
+      .filter(job => job.availableAt <= now);
 
     for (const job of pendingJobs) {
       try {
         // Mark as running
         db.update(backgroundJobs)
-          .set({ status: 'running', lockedAt: now, attempts: job.attempts + 1 })
+          .set({ status: 'running', lockedAt: now, attempts: job.attempts + 1, modifiedAt: now })
           .where(eq(backgroundJobs.id, job.id))
           .run();
 
@@ -134,14 +132,14 @@ function processJobs() {
 
         // Mark as succeeded
         db.update(backgroundJobs)
-          .set({ status: 'succeeded', completedAt: now })
+          .set({ status: 'succeeded', completedAt: now, modifiedAt: now })
           .where(eq(backgroundJobs.id, job.id))
           .run();
 
         console.log(`[Worker] Job ${job.id} completed successfully`);
       } catch (jobError: any) {
         db.update(backgroundJobs)
-          .set({ status: 'failed', lastError: jobError.message })
+          .set({ status: 'failed', lastError: jobError.message, modifiedAt: now })
           .where(eq(backgroundJobs.id, job.id))
           .run();
 

@@ -3,7 +3,6 @@ import { db } from '../db';
 import { tasks, userStories, projects, notifications, users } from '../db/schema';
 import { requireAuth } from '../middleware/auth';
 import { eq, and, desc, isNull } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -11,56 +10,57 @@ const router = Router();
 router.post('/', requireAuth, (req, res) => {
   try {
     const { storyId, title, description, priority, assigneeId, estimateMinutes, dueDate } = req.body;
-    const reporterId = req.session.userId!;
+    const userId = req.session.userId!;
+    const parsedStoryId = typeof storyId === 'string' ? parseInt(storyId, 10) : storyId;
 
     if (!storyId || !title) {
       return res.status(400).json({ error: 'Story ID and title are required' });
     }
 
     // Verify story exists and get project key
-    const story = db.select().from(userStories).where(eq(userStories.id, storyId)).get();
+    const story = db.select().from(userStories).where(eq(userStories.id, parsedStoryId)).get();
     if (!story) {
       return res.status(404).json({ error: 'Story not found' });
     }
 
     // Generate task key
-    const existingCount = db.select().from(tasks).where(eq(tasks.storyId, storyId)).all().length;
+    const existingCount = db.select().from(tasks).where(eq(tasks.storyId, parsedStoryId)).all().length;
     const key = `${story.key}-T${existingCount + 1}`;
 
-    const now = new Date();
-    const taskId = uuidv4();
+    const now = Date.now();
 
     // Get max sort order
-    const existingTasks = db.select().from(tasks).where(eq(tasks.storyId, storyId)).all();
+    const existingTasks = db.select().from(tasks).where(eq(tasks.storyId, parsedStoryId)).all();
     const maxSortOrder = existingTasks.reduce((max, t) => Math.max(max, t.sortOrder || 0), 0);
 
+    const parsedAssigneeId = assigneeId ? (typeof assigneeId === 'string' ? parseInt(assigneeId, 10) : assigneeId) : undefined;
+
     const newTask = db.insert(tasks).values({
-      id: taskId,
-      storyId,
+      storyId: parsedStoryId,
       key,
       title,
       description,
       priority: priority || 'medium',
-      assigneeId,
-      reporterId,
+      assigneeId: parsedAssigneeId,
+      reporterId: userId,
       estimateMinutes,
-      dueDate: dueDate ? new Date(dueDate) : undefined,
+      dueDate: dueDate ? new Date(dueDate).getTime() : undefined,
       sortOrder: maxSortOrder + 1,
       createdAt: now,
-      updatedAt: now,
+      createdById: userId,
     }).returning().get();
 
     // Create notification whenever assigned
-    if (assigneeId) {
+    if (parsedAssigneeId) {
       db.insert(notifications).values({
-        id: uuidv4(),
-        userId: assigneeId,
+        userId: parsedAssigneeId,
         type: 'task_assigned',
         title: 'New task assigned',
         message: `You have been assigned to task "${title}" (${key})`,
-        relatedId: taskId,
+        relatedId: String(newTask.id),
         relatedType: 'task',
         createdAt: now,
+        createdById: userId,
       }).run();
     }
 
@@ -74,7 +74,7 @@ router.post('/', requireAuth, (req, res) => {
 // List tasks for a story
 router.get('/story/:storyId', requireAuth, (req, res) => {
   try {
-    const storyId = req.params.storyId as string;
+    const storyId = parseInt(req.params.storyId, 10);
 
     const storyTasks = db.select()
       .from(tasks)
@@ -113,7 +113,7 @@ router.get('/my-work', requireAuth, (req, res) => {
       .innerJoin(userStories, eq(tasks.storyId, userStories.id))
       .innerJoin(projects, eq(userStories.projectId, projects.id))
       .where(eq(tasks.assigneeId, userId))
-      .orderBy(desc(tasks.updatedAt))
+      .orderBy(desc(tasks.modifiedAt))
       .all();
 
     res.json(userTasks);
@@ -126,7 +126,7 @@ router.get('/my-work', requireAuth, (req, res) => {
 // Get task details
 router.get('/:taskId', requireAuth, (req, res) => {
   try {
-    const taskId = req.params.taskId as string;
+    const taskId = parseInt(req.params.taskId, 10);
 
     const task = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
     if (!task) {
@@ -143,7 +143,8 @@ router.get('/:taskId', requireAuth, (req, res) => {
 // Update task
 router.put('/:taskId', requireAuth, (req, res) => {
   try {
-    const taskId = req.params.taskId as string;
+    const taskId = parseInt(req.params.taskId, 10);
+    const userId = req.session.userId!;
     const { title, description, status, priority, assigneeId, estimateMinutes, dueDate, sortOrder } = req.body;
 
     const existing = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
@@ -151,8 +152,8 @@ router.put('/:taskId', requireAuth, (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const now = new Date();
-    const updateData: any = { updatedAt: now };
+    const now = Date.now();
+    const updateData: any = { modifiedAt: now, modifiedById: userId };
 
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
@@ -165,9 +166,11 @@ router.put('/:taskId', requireAuth, (req, res) => {
       }
     }
     if (priority !== undefined) updateData.priority = priority;
-    if (assigneeId !== undefined) updateData.assigneeId = assigneeId;
+    if (assigneeId !== undefined) {
+      updateData.assigneeId = assigneeId ? (typeof assigneeId === 'string' ? parseInt(assigneeId, 10) : assigneeId) : null;
+    }
     if (estimateMinutes !== undefined) updateData.estimateMinutes = estimateMinutes;
-    if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
+    if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate).getTime() : null;
     if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
 
     const updated = db.update(tasks)
@@ -176,17 +179,18 @@ router.put('/:taskId', requireAuth, (req, res) => {
       .returning().get();
 
     // Create notification if assignee changed
-    if (assigneeId && assigneeId !== existing.assigneeId && assigneeId !== req.session.userId) {
-      const assigner = db.select().from(users).where(eq(users.id, req.session.userId!)).get();
+    const parsedAssigneeId = assigneeId ? (typeof assigneeId === 'string' ? parseInt(assigneeId, 10) : assigneeId) : null;
+    if (parsedAssigneeId && parsedAssigneeId !== existing.assigneeId && parsedAssigneeId !== userId) {
+      const assigner = db.select().from(users).where(eq(users.id, userId)).get();
       db.insert(notifications).values({
-        id: uuidv4(),
-        userId: assigneeId,
+        userId: parsedAssigneeId,
         type: 'task_assigned',
         title: 'Task Assigned',
         message: `${assigner?.name || 'A team member'} assigned you to task "${updated.title}" (${updated.key})`,
-        relatedId: taskId,
+        relatedId: String(taskId),
         relatedType: 'task',
         createdAt: now,
+        createdById: userId,
       }).run();
     }
 
@@ -200,21 +204,22 @@ router.put('/:taskId', requireAuth, (req, res) => {
 // Update task status
 router.patch('/:taskId/status', requireAuth, (req, res) => {
   try {
-    const taskId = req.params.taskId as string;
+    const taskId = parseInt(req.params.taskId, 10);
     const { status } = req.body;
+    const userId = req.session.userId!;
 
     const existing = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
     if (!existing) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const now = new Date();
-    const currentUserId = req.session.userId!;
+    const now = Date.now();
 
     const updated = db.update(tasks)
       .set({
         status,
-        updatedAt: now,
+        modifiedAt: now,
+        modifiedById: userId,
         completedAt: status === 'done' ? now : null,
       })
       .where(eq(tasks.id, taskId))
@@ -222,21 +227,21 @@ router.patch('/:taskId/status', requireAuth, (req, res) => {
 
     // Create completion notification if completed
     if (status === 'done') {
-      const completer = db.select().from(users).where(eq(users.id, currentUserId)).get();
-      const targetUserId = (existing.reporterId && existing.reporterId !== currentUserId)
+      const completer = db.select().from(users).where(eq(users.id, userId)).get();
+      const targetUserId = (existing.reporterId && existing.reporterId !== userId)
         ? existing.reporterId
-        : (existing.assigneeId && existing.assigneeId !== currentUserId ? existing.assigneeId : null);
+        : (existing.assigneeId && existing.assigneeId !== userId ? existing.assigneeId : null);
 
       if (targetUserId) {
         db.insert(notifications).values({
-          id: uuidv4(),
           userId: targetUserId,
           type: 'story_updated',
           title: 'Task Completed',
           message: `${completer?.name || 'A team member'} completed task "${existing.title}" (${existing.key})`,
-          relatedId: taskId,
+          relatedId: String(taskId),
           relatedType: 'task',
           createdAt: now,
+          createdById: userId,
         }).run();
       }
     }
@@ -251,7 +256,7 @@ router.patch('/:taskId/status', requireAuth, (req, res) => {
 // Delete task
 router.delete('/:taskId', requireAuth, (req, res) => {
   try {
-    const taskId = req.params.taskId as string;
+    const taskId = parseInt(req.params.taskId, 10);
 
     db.delete(tasks).where(eq(tasks.id, taskId)).run();
     res.json({ message: 'Task deleted' });

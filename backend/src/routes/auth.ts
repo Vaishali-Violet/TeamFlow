@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
@@ -23,20 +22,17 @@ router.post('/register', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const userId = uuidv4();
-    const now = new Date();
+    const now = Date.now();
 
     const newUser = db.insert(users).values({
-      id: userId,
       name,
       email,
       passwordHash,
       createdAt: now,
-      updatedAt: now,
     }).returning().get();
 
     // Create session
-    (req.session as any).userId = newUser.id;
+    req.session.userId = newUser.id;
     req.session.save((err) => {
       if (err) {
         console.error('Session save error:', err);
@@ -80,7 +76,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Create session
-    (req.session as any).userId = user.id;
+    req.session.userId = user.id;
     req.session.save((err) => {
       if (err) {
         console.error('Session save error:', err);
@@ -111,7 +107,7 @@ router.post('/logout', (req, res) => {
 
 // Get current user (session check)
 router.get('/me', (req, res) => {
-  const userId = (req.session as any).userId;
+  const userId = req.session.userId;
   
   if (!userId) {
     return res.status(401).json({ error: 'Not authenticated' });
