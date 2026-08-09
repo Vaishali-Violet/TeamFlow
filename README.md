@@ -66,5 +66,5 @@ npm run dev
 
 ## 📜 License
 
-ISC License
+This project is licensed under the [MIT License](LICENSE) (or private/internal repository).
 
