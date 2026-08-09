@@ -66,6 +66,6 @@ npm run dev
 
 ## Links
 
-Deployed Link : https://6a7780f7dad05ac3c0c58cce--teamflow-internproject.netlify.app/projects
+Deployed Link : https://teamflow-internproject.netlify.app
 Video Link : https://drive.google.com/file/d/1_0rP41AsGCUWKUyvm4xdrdyZJtxJOiJN/view?usp=sharing
 
