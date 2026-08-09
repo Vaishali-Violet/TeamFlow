@@ -64,7 +64,8 @@ npm run dev
 
 ---
 
-## 📜 License
+## Links
 
-This project is licensed under the [MIT License](LICENSE) (or private/internal repository).
+Deployed Link : https://6a7780f7dad05ac3c0c58cce--teamflow-internproject.netlify.app/projects
+Video Link : https://drive.google.com/file/d/1_0rP41AsGCUWKUyvm4xdrdyZJtxJOiJN/view?usp=sharing
 
