@@ -1,23 +1,70 @@
-# Render CLI
+# TeamFlow 🚀
 
-## Installation
+TeamFlow is a full-stack project management and collaboration workspace platform built with **TypeScript**, **React**, **Node.js/Express**, and **SQLite (Drizzle ORM)**.
 
-- [Homebrew](https://render.com/docs/cli#homebrew-macos-linux)
-- [Direct Download](https://render.com/docs/cli#direct-download)
+---
 
-## Documentation
+## 🏗 Project Architecture
 
-Documentation is hosted at https://render.com/docs/cli.
+- **`backend/`**: Node.js & Express REST API using Drizzle ORM + Better-SQLite3.
+- **`frontend/`**: React SPA powered by Vite, Tailwind CSS, and Lucide icons.
 
-## Contributing
+---
 
-To create a new command, use the `cmd/template.go` template file as a starting point. Reference the [CLI Style Guide](docs/STYLE.md) to learn more about command naming, flags, arguments, and help text conventions.
+## ⚡ Quick Start
 
-### Dev setup
+### 1. Prerequisites
+- **Node.js** (v18+ recommended)
+- **npm** or **pnpm**
 
-We use [prek](https://prek.j178.dev/) to run precommit-compatible checks locally and in CI.
+---
 
-- If you didn't install `prek` following the [dev setup guide](https://slab.render.com/posts/dev-setup-guide-ect5drdb), do so now (e.g., `brew install prek`)
-- Set up prek git hooks with `prek install`.
+### 2. Backend Setup
 
-Read [AGENTS.md](AGENTS.md) for common dev commands. It's written for humans too!
+```bash
+cd backend
+npm install
+```
+
+#### Run Backend Server:
+```bash
+npm start
+```
+*Runs the Express API on `http://localhost:5000` (or `PORT` specified in `.env`).*
+
+#### Database Management & Drizzle Studio:
+```bash
+# Run Drizzle Studio to inspect SQLite database tables visually
+npm run db:studio
+
+# Push schema changes to SQLite
+npm run db:push
+```
+*Drizzle Studio opens at `https://local.drizzle.studio`.*
+
+---
+
+### 3. Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+*Runs Vite dev server on `http://localhost:5173`.*
+
+---
+
+## 🛠 Features
+
+- **Workspaces & Projects**: Manage multi-tenant workspaces and user projects.
+- **User Stories & Tasks**: Task tracking, status updates, and estimations.
+- **Real-time & Background Processing**: Chat messages and background jobs.
+- **Database Visualizer**: Integrated Drizzle Studio support with cross-platform SQLite configuration.
+
+---
+
+## 📜 License
+
+ISC License
+
