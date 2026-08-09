@@ -74,7 +74,7 @@ router.post('/', requireAuth, (req, res) => {
 // List tasks for a story
 router.get('/story/:storyId', requireAuth, (req, res) => {
   try {
-    const storyId = parseInt(req.params.storyId, 10);
+    const storyId = parseInt(req.params.storyId as string, 10);
 
     const storyTasks = db.select()
       .from(tasks)
@@ -126,7 +126,7 @@ router.get('/my-work', requireAuth, (req, res) => {
 // Get task details
 router.get('/:taskId', requireAuth, (req, res) => {
   try {
-    const taskId = parseInt(req.params.taskId, 10);
+    const taskId = parseInt(req.params.taskId as string, 10);
 
     const task = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
     if (!task) {
@@ -143,7 +143,7 @@ router.get('/:taskId', requireAuth, (req, res) => {
 // Update task
 router.put('/:taskId', requireAuth, (req, res) => {
   try {
-    const taskId = parseInt(req.params.taskId, 10);
+    const taskId = parseInt(req.params.taskId as string, 10);
     const userId = req.session.userId!;
     const { title, description, status, priority, assigneeId, estimateMinutes, dueDate, sortOrder } = req.body;
 
@@ -204,7 +204,7 @@ router.put('/:taskId', requireAuth, (req, res) => {
 // Update task status
 router.patch('/:taskId/status', requireAuth, (req, res) => {
   try {
-    const taskId = parseInt(req.params.taskId, 10);
+    const taskId = parseInt(req.params.taskId as string, 10);
     const { status } = req.body;
     const userId = req.session.userId!;
 
@@ -256,7 +256,7 @@ router.patch('/:taskId/status', requireAuth, (req, res) => {
 // Delete task
 router.delete('/:taskId', requireAuth, (req, res) => {
   try {
-    const taskId = parseInt(req.params.taskId, 10);
+    const taskId = parseInt(req.params.taskId as string, 10);
 
     db.delete(tasks).where(eq(tasks.id, taskId)).run();
     res.json({ message: 'Task deleted' });

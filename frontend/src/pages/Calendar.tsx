@@ -14,20 +14,6 @@ interface CalendarEvent {
   assigneeId?: string;
 }
 
-const PRESETS = [
-  { label: "Today", value: 0 },
-  { label: "Tomorrow", value: 1 },
-  { label: "In 3 days", value: 3 },
-  { label: "In a week", value: 7 },
-  { label: "In 2 weeks", value: 14 },
-];
-
-const addDays = (date: Date, days: number) => {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-};
-
 const CalendarPage = () => {
   const { currentWorkspace } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -60,12 +46,6 @@ const CalendarPage = () => {
 
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-
-  const handlePresetClick = (days: number) => {
-    const targetDate = addDays(new Date(), days);
-    setSelectedDate(targetDate);
-    setCurrentDate(new Date(targetDate.getFullYear(), targetDate.getMonth(), 1));
-  };
 
   const parseLocalDate = (dateVal: any) => {
     if (!dateVal) return null;
@@ -136,20 +116,6 @@ const CalendarPage = () => {
             </button>
           </div>
         </div>
-      </div>
-
-      {/* Date Presets Bar */}
-      <div className="flex flex-wrap items-center gap-2 glass-panel p-2">
-        <span className="text-xs font-semibold text-muted px-2">QUICK PRESETS:</span>
-        {PRESETS.map(preset => (
-          <button
-            key={preset.value}
-            className="btn btn-secondary text-xs"
-            onClick={() => handlePresetClick(preset.value)}
-          >
-            {preset.label}
-          </button>
-        ))}
       </div>
 
       {/* Grid Format Calendar */}

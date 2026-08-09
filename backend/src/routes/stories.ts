@@ -69,7 +69,7 @@ router.post('/', requireAuth, (req, res) => {
 // List stories for a project
 router.get('/project/:projectId', requireAuth, (req, res) => {
   try {
-    const projectId = parseInt(req.params.projectId, 10);
+    const projectId = parseInt(req.params.projectId as string, 10);
 
     const stories = db.select()
       .from(userStories)
@@ -86,7 +86,7 @@ router.get('/project/:projectId', requireAuth, (req, res) => {
 // Get story details
 router.get('/:storyId', requireAuth, (req, res) => {
   try {
-    const storyId = parseInt(req.params.storyId, 10);
+    const storyId = parseInt(req.params.storyId as string, 10);
 
     const story = db.select().from(userStories).where(eq(userStories.id, storyId)).get();
     if (!story) {
@@ -103,7 +103,7 @@ router.get('/:storyId', requireAuth, (req, res) => {
 // Update story
 router.put('/:storyId', requireAuth, (req, res) => {
   try {
-    const storyId = parseInt(req.params.storyId, 10);
+    const storyId = parseInt(req.params.storyId as string, 10);
     const userId = req.session.userId!;
     const { title, description, acceptanceCriteria, status, priority, storyPoints, assigneeId, dueDate } = req.body;
 
@@ -161,7 +161,7 @@ router.put('/:storyId', requireAuth, (req, res) => {
 // Quick status update (for Kanban drag-drop)
 router.patch('/:storyId/status', requireAuth, (req, res) => {
   try {
-    const storyId = parseInt(req.params.storyId, 10);
+    const storyId = parseInt(req.params.storyId as string, 10);
     const { status } = req.body;
     const userId = req.session.userId!;
 
@@ -208,7 +208,7 @@ router.patch('/:storyId/status', requireAuth, (req, res) => {
 // Delete story
 router.delete('/:storyId', requireAuth, (req, res) => {
   try {
-    const storyId = parseInt(req.params.storyId, 10);
+    const storyId = parseInt(req.params.storyId as string, 10);
 
     db.delete(userStories).where(eq(userStories.id, storyId)).run();
     res.json({ message: 'Story deleted' });

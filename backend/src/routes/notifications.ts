@@ -47,7 +47,7 @@ router.get('/unread-count', requireAuth, (req, res) => {
 // Mark notification as read
 router.patch('/:id/read', requireAuth, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     const userId = req.session.userId!;
 
     const updated = db.update(notifications)

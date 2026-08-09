@@ -38,7 +38,7 @@ router.post('/', requireAuth, requireWorkspaceAccess, async (req, res) => {
 // Get all projects in a workspace (requires workspace access)
 router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req, res) => {
   try {
-    const workspaceId = parseInt(req.params.workspaceId, 10);
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
     const workspaceProjects = db.select().from(projects).where(eq(projects.workspaceId, workspaceId)).all();
     res.json(workspaceProjects);
   } catch (error) {
@@ -50,7 +50,7 @@ router.get('/workspace/:workspaceId', requireAuth, requireWorkspaceAccess, (req,
 // Get a specific project
 router.get('/:projectId', requireAuth, (req, res) => {
   try {
-    const projectId = parseInt(req.params.projectId, 10);
+    const projectId = parseInt(req.params.projectId as string, 10);
 
     const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
     if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -65,7 +65,7 @@ router.get('/:projectId', requireAuth, (req, res) => {
 // Update project
 router.put('/:projectId', requireAuth, (req, res) => {
   try {
-    const projectId = parseInt(req.params.projectId, 10);
+    const projectId = parseInt(req.params.projectId as string, 10);
     const userId = req.session.userId!;
     const { name, description, status, startDate, targetDate } = req.body;
 
@@ -96,7 +96,7 @@ router.put('/:projectId', requireAuth, (req, res) => {
 // Delete project
 router.delete('/:projectId', requireAuth, (req, res) => {
   try {
-    const projectId = parseInt(req.params.projectId, 10);
+    const projectId = parseInt(req.params.projectId as string, 10);
 
     const existing = db.select().from(projects).where(eq(projects.id, projectId)).get();
     if (!existing) {
@@ -124,7 +124,7 @@ router.delete('/:projectId', requireAuth, (req, res) => {
 // Dashboard stats for a workspace
 router.get('/stats/:workspaceId', requireAuth, (req, res) => {
   try {
-    const workspaceId = parseInt(req.params.workspaceId, 10);
+    const workspaceId = parseInt(req.params.workspaceId as string, 10);
 
     const allProjects = db.select().from(projects).where(eq(projects.workspaceId, workspaceId)).all();
     const activeProjects = allProjects.filter(p => p.status === 'active' || p.status === 'planning');
